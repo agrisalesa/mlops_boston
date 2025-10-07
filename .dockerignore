@@ -1,0 +1,9 @@
+# Ignorar archivos innecesarios para la imagen Docker
+.venv
+__pycache__/
+*.py[cod]
+*.log
+*.ipynb
+data/
+logs/
+.git
