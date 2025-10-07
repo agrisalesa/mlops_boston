@@ -1,0 +1,11 @@
+# Núcleo científico
+numpy
+pandas
+scikit-learn
+joblib
+
+# Modelos
+xgboost
+
+# Serving
+flask

@@ -1,0 +1,37 @@
+{
+  "trained_at": "2025-10-07T19:05:08.173628+00:00",
+  "random_seed": 42,
+  "test_size": 0.2,
+  "n_rows": 506,
+  "n_features": 13,
+  "feature_order": [
+    "CRIM",
+    "ZN",
+    "INDUS",
+    "CHAS",
+    "NOX",
+    "RM",
+    "AGE",
+    "DIS",
+    "RAD",
+    "TAX",
+    "PTRATIO",
+    "B",
+    "LSTAT"
+  ],
+  "target": "MEDV",
+  "data_provenance": {
+    "sha256": "7a1eefeaed0bcc17daa972f9e2131b802d0fde5347c5f2ae80af852088dd5f43",
+    "source": "Kaggle \u2013 altavish/boston-housing-dataset",
+    "generated_at": "2025-10-07 13:59:52"
+  },
+  "best_model": {
+    "name": "xgboost",
+    "path": "models/best_model.pkl",
+    "test_metrics": {
+      "mae": 1.8004595672383026,
+      "rmse": 2.366121348209503,
+      "r2": 0.923656874182896
+    }
+  }
+}
