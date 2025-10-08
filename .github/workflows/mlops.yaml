@@ -10,13 +10,11 @@ on:
         required: false
         default: "false"
 
-# Necesario para publicar imagen en GHCR
 permissions:
   contents: read
   packages: write
 
 jobs:
-  # 1) Construye, valida, entrena y deja artefactos base
   build-train-test:
     runs-on: ubuntu-latest
     steps:
@@ -32,7 +30,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # Dependencias que algunos runners no traen precompiladas
           pip install xgboost scipy
 
       - name: Provenance
@@ -56,7 +53,6 @@ jobs:
             data/processed/housing_clean.csv
             data/provenance.json
 
-  # 2) Verifica drift (produce salida booleana)
   drift-check:
     needs: build-train-test
     runs-on: ubuntu-latest
@@ -89,7 +85,6 @@ jobs:
       - name: Run drift check
         run: python scripts/04_drift_check.py || true
 
-      # IMPORTANTE: sin heredoc, así evitamos errores de YAML
       - name: Set output
         id: setout
         shell: bash
@@ -100,7 +95,6 @@ jobs:
           fi
           echo "drift=$DRIFT" >> "$GITHUB_OUTPUT"
 
-  # 3) Retraining solo si hubo drift o si lo forzaste manualmente
   retrain:
     needs: [build-train-test, drift-check]
     if: needs.build-train-test.result == 'success' && (github.event.inputs.force_retrain == 'true' || needs.drift-check.outputs.drift == 'true')
@@ -144,15 +138,21 @@ jobs:
         id: flag
         run: echo "updated=true" >> "$GITHUB_OUTPUT"
 
-  # 4) Siempre construye y publica la imagen; usa artefactos actualizados si existen
   docker-image:
-    needs: [build-train-test, drift-check, retrain]
+    # ✅ Corre SIEMPRE (aunque retrain se haya saltado)
+    if: ${{ always() }}
+    needs: [build-train-test, retrain]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Si hubo retrain, baja los artefactos actualizados
+      - name: Debug needs context
+        run: |
+          echo "needs.retrain.result=${{ needs.retrain.result }}"
+          echo "needs.retrain.outputs.updated=${{ needs.retrain.outputs.updated }}"
+
+      # Usa artefactos actualizados si hubo retrain exitoso
       - name: Download updated artifacts (if any)
         if: needs.retrain.result == 'success' && needs.retrain.outputs.updated == 'true'
         uses: actions/download-artifact@v4
@@ -160,7 +160,7 @@ jobs:
           name: model-artifacts-updated
           path: .
 
-      # Si NO hubo retrain, usa los artefactos base
+      # Fallback a artefactos base
       - name: Download baseline artifacts (fallback)
         if: needs.retrain.result != 'success' || needs.retrain.outputs.updated != 'true'
         uses: actions/download-artifact@v4
