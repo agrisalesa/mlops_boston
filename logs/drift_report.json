@@ -1,0 +1,10 @@
+{
+  "n_ref": 506,
+  "n_live": 1,
+  "columns": {},
+  "summary": {
+    "drift_columns": [],
+    "drift_detected": false,
+    "reason": "insufficient_live_rows(<200)"
+  }
+}

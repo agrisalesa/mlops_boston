@@ -2,107 +2,131 @@ name: mlops-ci
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-
-permissions:
-  contents: read
-  packages: write
-
-env:
-  PYTHON_VERSION: "3.10"
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      force_retrain:
+        description: "Forzar retraining"
+        required: false
+        default: "false"
 
 jobs:
   build-train-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: "3.10"
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install gunicorn
 
-      - name: Create synthetic dataset for CI
-        run: |
-          python - << 'PY'
-          import os, pandas as pd, numpy as np
-          os.makedirs('data/raw', exist_ok=True)
-          n=400
-          rng = np.random.default_rng(42)
-          df = pd.DataFrame({
-            "CRIM": rng.uniform(0,10,size=n),
-            "ZN": rng.integers(0,101,size=n),
-            "INDUS": rng.uniform(0,30,size=n),
-            "CHAS": rng.integers(0,2,size=n),
-            "NOX": rng.uniform(0.3,0.9,size=n),
-            "RM": np.clip(rng.normal(6.2,0.7,size=n), 3, 9),
-            "AGE": rng.uniform(0,100,size=n),
-            "DIS": rng.uniform(1,12,size=n),
-            "RAD": rng.integers(1,25,size=n),
-            "TAX": rng.uniform(180,720,size=n),
-            "PTRATIO": rng.uniform(12,22,size=n),
-            "B": rng.uniform(0,400,size=n),
-            "LSTAT": rng.uniform(1,38,size=n),
-          })
-          y = 30 + 4*(df["RM"]-6.5) - 0.5*(df["LSTAT"]-12) - 0.01*(df["TAX"]-330) + rng.normal(0,2,size=n)
-          df["MEDV"] = np.clip(y, 5, 50)
-          df.to_csv('data/raw/housing.csv', index=False)
-          PY
-
-      - name: Generate provenance
+      - name: Provenance
         run: python scripts/00_provenance.py
 
       - name: Validate & clean data
         run: python scripts/01_validar_datos.py
 
-      - name: Train models
+      - name: Train baseline
         run: python scripts/02_train_baseline.py
 
-      - name: Upload training artifacts
+      - name: Upload artifacts (models + processed data)
         uses: actions/upload-artifact@v4
         with:
           name: model-artifacts
           path: |
-            models/best_model.pkl
-            models/preprocessor.pkl
-            models/model_metadata.json
-            models/metrics.json
-            models/schema.json
-            app/server.py
-            requirements.txt
-            Dockerfile
-            .dockerignore
+            models/
+            data/processed/housing_clean.csv
+            data/provenance.json
 
-  docker:
+  drift-check:
     needs: build-train-test
     runs-on: ubuntu-latest
+    outputs:
+      drift: ${{ steps.setout.outputs.drift }}
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install scipy
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: model-artifacts
           path: .
+
+      - name: Ensure logs dir
+        run: mkdir -p logs
+
+      - name: Run drift check
+        id: drift
+        run: |
+          # si no hay logs/predictions.csv, el script saldrá con mensaje pero sin error
+          python scripts/04_drift_check.py || true
+
+      - name: Set output
+        id: setout
+        run: |
+          DRIFT=false
+          if [ -f logs/drift_report.json ]; then
+            python -c "import json; r=json.load(open('logs/drift_report.json')); print('true' if r.get('summary',{}).get('drift_detected') else 'false')" > drift_flag.txt
+            DRIFT=$(cat drift_flag.txt)
+          fi
+          echo "drift=$DRIFT" >> $GITHUB_OUTPUT
+
+  retrain-and-docker:
+    needs: [build-train-test, drift-check]
+    if: needs.drift-check.outputs.drift == 'true' || github.event.inputs.force_retrain == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install xgboost scipy
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: model-artifacts
+          path: .
+
+      - name: Retrain if better
+        run: |
+          python scripts/03_retrain_if_better.py --force
+
+      - name: Upload updated artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts-updated
+          path: |
+            models/
+            data/processed/housing_clean.csv
+            data/provenance.json
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -111,22 +135,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build image
-        run: |
-          docker build -t $IMAGE_NAME:sha-${{ github.sha }} -t $IMAGE_NAME:latest .
-
-      - name: Push image
-        run: |
-          docker push $IMAGE_NAME:sha-${{ github.sha }}
-          docker push $IMAGE_NAME:latest
-
-      - name: Smoke test container
-        run: |
-          docker run -d -p 8000:8000 --name api $IMAGE_NAME:sha-${{ github.sha }}
-          sleep 7
-          curl -f http://127.0.0.1:8000/health
-          curl -f -X POST http://127.0.0.1:8000/predict \
-            -H "Content-Type: application/json" \
-            -d '{"CRIM":0.1,"ZN":18,"INDUS":2.31,"CHAS":0,"NOX":0.538,"RM":6.575,"AGE":65.2,"DIS":4.09,"RAD":1,"TAX":296,"PTRATIO":15.3,"B":396.9,"LSTAT":4.98}'
-          docker logs api || true
-          docker stop api && docker rm api
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
