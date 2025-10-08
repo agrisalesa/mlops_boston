@@ -1,21 +1,20 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from pathlib import Path
-from datetime import datetime, timezone
+
 import json
+import pickle
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.ensemble import RandomForestRegressor
-from joblib import dump
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
+# xgboost es opcional; si no existe, el script continúa sin él
 try:
     from xgboost import XGBRegressor
     HAS_XGB = True
@@ -24,152 +23,169 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
+PROCESSED = DATA / "processed"
 MODELS = ROOT / "models"
+SCHEMA_PATH = MODELS / "schema.json"
+METRICS_PATH = MODELS / "metrics.json"
+META_PATH = MODELS / "model_metadata.json"
+BEST_MODEL_PATH = MODELS / "best_model.pkl"
+PREPROC_PATH = MODELS / "preprocessor.pkl"
 
-PROCESSED = DATA / "processed" / "housing_clean.csv"
-PROVENANCE = DATA / "provenance.json"
 
-BEST_MODEL = MODELS / "best_model.pkl"
-PREPROCESSOR = MODELS / "preprocessor.pkl"
-METRICS = MODELS / "metrics.json"
-META = MODELS / "model_metadata.json"
-SCHEMA = MODELS / "schema.json"
+def _load_processed() -> pd.DataFrame:
+    path = PROCESSED / "housing_clean.csv"
+    if not path.exists():
+        raise FileNotFoundError("No existe data/processed/housing_clean.csv. Ejecuta 01_validar_datos.py primero.")
+    return pd.read_csv(path)
 
-TARGET = "MEDV"
 
-def _rmse(y_true, y_pred):
-    try:
-        from sklearn.metrics import mean_squared_error as mse
-        return float(mse(y_true, y_pred, squared=False))
-    except TypeError:
-        from sklearn.metrics import mean_squared_error as mse
-        return float(np.sqrt(mse(y_true, y_pred)))
+def _schema_features_order(df: pd.DataFrame) -> list:
+    """
+    Ordena columnas de features.
+    Si existe models/schema.json (en cualquiera de los dos formatos), usa ese orden.
+    Si no, toma todas menos MEDV.
+    """
+    if SCHEMA_PATH.exists():
+        sc = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        feats = sc.get("features", {})
+        if isinstance(feats, dict):
+            return list(feats.keys())
+        if isinstance(feats, list):
+            return feats
+    return [c for c in df.columns if c != "MEDV"]
 
-def _evaluate(y_true, y_pred):
+
+def _rmse(y_true, y_pred) -> float:
+    # evita problemas con versiones antiguas de sklearn
+    return float(np.sqrt(mean_squared_error(y_true, y_pred)))
+
+
+def _evaluate(y_true, y_pred) -> dict:
     return {
         "mae": float(mean_absolute_error(y_true, y_pred)),
         "rmse": _rmse(y_true, y_pred),
-        "r2": float(r2_score(y_true, y_pred))
+        "r2": float(r2_score(y_true, y_pred)),
     }
 
-def _preprocessor():
-    return Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-    ])
 
-def main(test_size=0.2, random_state=42):
-    if not PROCESSED.exists():
-        raise FileNotFoundError(f"Falta {PROCESSED}. Ejecuta 01_validar_datos.py primero.")
+def _guardar_schema_dict(feature_cols):
+    """
+    Guarda models/schema.json en el formato original solicitado:
+      features como dict {col: {"dtype": "...", "binary": bool}}
+    """
+    def _infer_dtype(c: str) -> str:
+        return "int" if c in ("CHAS", "RAD", "TAX") else "float"
 
-    df = pd.read_csv(PROCESSED)
-    features = [c for c in df.columns if c != TARGET]
+    schema = {
+        "target": "MEDV",
+        "features": {
+            c: {"dtype": _infer_dtype(c), "binary": bool(c == "CHAS")}
+            for c in feature_cols
+        },
+    }
+    MODELS.mkdir(parents=True, exist_ok=True)
+    SCHEMA_PATH.write_text(json.dumps(schema, indent=2), encoding="utf-8")
 
-    pre = _preprocessor()
-    X_proc = pre.fit_transform(df[features])
+
+def main():
+    MODELS.mkdir(parents=True, exist_ok=True)
+
+    # 1) Cargar dataset procesado
+    df = _load_processed()
+
+    # 2) Definir columnas
+    target = "MEDV"
+    feature_cols = _schema_features_order(df)
+    X = df[feature_cols].copy()
+    y = df[target].copy()
+
+    # 3) Split
     X_train, X_test, y_train, y_test = train_test_split(
-        X_proc, df[TARGET], test_size=test_size, random_state=random_state
+        X, y, test_size=0.20, random_state=42
     )
 
-    scores = {}
+    # 4) Preprocesador simple (estandarización). Se guarda como artefacto.
+    scaler = StandardScaler()
+    Xtr = scaler.fit_transform(X_train)
+    Xte = scaler.transform(X_test)
+
+    # 5) Modelos
     models = {}
 
-    lr = LinearRegression().fit(X_train, y_train)
-    scores["linear_regression"] = _evaluate(y_test, lr.predict(X_test))
+    # Linear Regression
+    lr = LinearRegression()
+    lr.fit(Xtr, y_train)
     models["linear_regression"] = lr
 
-    ridge = GridSearchCV(
-        Ridge(), {"alpha": [0.1, 1.0, 10.0, 100.0]},
-        cv=5, n_jobs=-1
-    ).fit(X_train, y_train)
-    scores["ridge"] = _evaluate(y_test, ridge.predict(X_test))
-    models["ridge"] = ridge.best_estimator_
+    # Random Forest
+    rf = RandomForestRegressor(
+        n_estimators=300, random_state=42, n_jobs=-1
+    )
+    rf.fit(Xtr, y_train)
+    models["random_forest"] = rf
 
-    rf = GridSearchCV(
-        RandomForestRegressor(random_state=42),
-        {"n_estimators": [200, 400],
-         "max_depth": [None, 10, 20],
-         "min_samples_leaf": [1, 2]},
-        cv=3, n_jobs=-1
-    ).fit(X_train, y_train)
-    scores["random_forest"] = _evaluate(y_test, rf.predict(X_test))
-    models["random_forest"] = rf.best_estimator_
+    # Ridge
+    ridge = Ridge(alpha=1.0, random_state=42)
+    ridge.fit(Xtr, y_train)
+    models["ridge"] = ridge
 
     if HAS_XGB:
-        xgb = GridSearchCV(
-            XGBRegressor(
-                random_state=42, objective="reg:squarederror",
-                tree_method="hist", n_jobs=-1
-            ),
-            {"n_estimators": [300, 500],
-             "max_depth": [4, 6, 8],
-             "learning_rate": [0.05, 0.1],
-             "subsample": [0.8, 1.0]},
-            cv=3, n_jobs=-1
-        ).fit(X_train, y_train)
-        scores["xgboost"] = _evaluate(y_test, xgb.predict(X_test))
-        models["xgboost"] = xgb.best_estimator_
-    else:
-        print("Aviso: XGBoost no está instalado; se omite.")
+        xgb = XGBRegressor(
+            n_estimators=300,
+            learning_rate=0.05,
+            max_depth=6,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            random_state=42,
+            n_jobs=-1,
+            reg_lambda=1.0,
+        )
+        xgb.fit(Xtr, y_train)
+        models["xgboost"] = xgb
 
-    best_name = min(scores.items(), key=lambda kv: kv[1]["rmse"])[0]
+    # 6) Evaluación
+    metrics = {}
+    for name, m in models.items():
+        yhat = m.predict(Xte)
+        metrics[name] = _evaluate(y_test, yhat)
+
+    # 7) Selección por RMSE mínimo
+    best_name = min(metrics.keys(), key=lambda k: metrics[k]["rmse"])
     best_model = models[best_name]
 
-    # Guardar artefactos principales
-    MODELS.mkdir(exist_ok=True)
-    dump(best_model, BEST_MODEL)
-    dump(pre, PREPROCESSOR)
-    print("Guardado: best_model.pkl y preprocessor.pkl")
+    # 8) Guardado de artefactos
+    with open(BEST_MODEL_PATH, "wb") as f:
+        pickle.dump(best_model, f)
 
-    # Guardar esquema simple (orden/ tipos básicos)
-    schema = {
-        "target": TARGET,
-        "features": features,
-        "dtypes": {c: ("float" if np.issubdtype(df[c].dtype, np.number) else "object") for c in df.columns if c != TARGET}
-    }
-    SCHEMA.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+    with open(PREPROC_PATH, "wb") as f:
+        pickle.dump(scaler, f)
 
-    # Cargar hash desde provenance.json (generado por 00_provenance.py)
-    data_hash = None
-    if PROVENANCE.exists():
-        try:
-            data_hash = json.loads(PROVENANCE.read_text(encoding="utf-8")).get("sha256")
-        except Exception:
-            pass
-
-    # Guardar métricas y metadatos (clave para el retrain posterior)
-    ts = datetime.now(timezone.utc).isoformat()
-    METRICS.write_text(
-        json.dumps({
-            "per_model": scores,
-            "best": {"name": best_name, "rmse": scores[best_name]["rmse"]},
-            "evaluated_at": ts
-        }, indent=2),
-        encoding="utf-8"
+    # 9) Guardar métricas y metadata
+    METRICS_PATH.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    META_PATH.write_text(
+        json.dumps(
+            {
+                "best_model_name": best_name,
+                "trained_at": datetime.utcnow().isoformat() + "Z",
+                "n_features": len(feature_cols),
+                "feature_order": feature_cols,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
-    META.write_text(
-        json.dumps({
-            "best_model_name": best_name,
-            "best_rmse": scores[best_name]["rmse"],
-            "feature_order": features,
-            "target": TARGET,
-            "trained_at": ts,
-            "data_sha256": data_hash,
-            "train_size": int(len(y_train)),
-            "test_size": int(len(y_test))
-        }, indent=2),
-        encoding="utf-8"
-    )
+    # 10) Guardar schema en el formato acordado (dict)
+    _guardar_schema_dict(feature_cols)
 
-    # Resumen por consola
-    print("\nEntrenamiento con grid completado.")
-    print(f"Train: {len(y_train)} | Test: {len(y_test)} | Features: {len(features)}")
+    # 11) Salida por consola
+    print("Train:", len(X_train), "| Test:", len(X_test), "| Features:", len(feature_cols))
     print("Métricas (test) por modelo:")
-    for k, v in scores.items():
-        print(f"  {k:<16} -> {v}")
-    print(f"Mejor por RMSE: {best_name}")
-    print("Guardados: metrics.json, model_metadata.json y schema.json")
+    for k in metrics:
+        print(f"  {k:<16} -> {metrics[k]}")
+    print("Mejor por RMSE:", best_name)
+    print("Artefactos guardados en 'models/'.")
+
 
 if __name__ == "__main__":
     main()

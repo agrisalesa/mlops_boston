@@ -1,6 +1,7 @@
 {
   "best_model_name": "xgboost",
-  "best_rmse": 2.4951022045734965,
+  "trained_at": "2025-10-08T18:39:25.230120Z",
+  "n_features": 13,
   "feature_order": [
     "CRIM",
     "ZN",
@@ -15,10 +16,5 @@
     "PTRATIO",
     "B",
     "LSTAT"
-  ],
-  "target": "MEDV",
-  "trained_at": "2025-10-08T16:08:42.220909+00:00",
-  "data_sha256": "7a1eefeaed0bcc17daa972f9e2131b802d0fde5347c5f2ae80af852088dd5f43",
-  "train_size": 404,
-  "test_size": 102
+  ]
 }

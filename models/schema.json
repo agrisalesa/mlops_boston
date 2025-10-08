@@ -1,33 +1,57 @@
 {
   "target": "MEDV",
-  "features": [
-    "CRIM",
-    "ZN",
-    "INDUS",
-    "CHAS",
-    "NOX",
-    "RM",
-    "AGE",
-    "DIS",
-    "RAD",
-    "TAX",
-    "PTRATIO",
-    "B",
-    "LSTAT"
-  ],
-  "dtypes": {
-    "CRIM": "float",
-    "ZN": "float",
-    "INDUS": "float",
-    "CHAS": "float",
-    "NOX": "float",
-    "RM": "float",
-    "AGE": "float",
-    "DIS": "float",
-    "RAD": "float",
-    "TAX": "float",
-    "PTRATIO": "float",
-    "B": "float",
-    "LSTAT": "float"
+  "features": {
+    "CRIM": {
+      "dtype": "float",
+      "binary": false
+    },
+    "ZN": {
+      "dtype": "float",
+      "binary": false
+    },
+    "INDUS": {
+      "dtype": "float",
+      "binary": false
+    },
+    "CHAS": {
+      "dtype": "int",
+      "binary": true
+    },
+    "NOX": {
+      "dtype": "float",
+      "binary": false
+    },
+    "RM": {
+      "dtype": "float",
+      "binary": false
+    },
+    "AGE": {
+      "dtype": "float",
+      "binary": false
+    },
+    "DIS": {
+      "dtype": "float",
+      "binary": false
+    },
+    "RAD": {
+      "dtype": "int",
+      "binary": false
+    },
+    "TAX": {
+      "dtype": "int",
+      "binary": false
+    },
+    "PTRATIO": {
+      "dtype": "float",
+      "binary": false
+    },
+    "B": {
+      "dtype": "float",
+      "binary": false
+    },
+    "LSTAT": {
+      "dtype": "float",
+      "binary": false
+    }
   }
 }
