@@ -1,18 +1,18 @@
 # Proyecto MLOps — Boston Housing
 
-**Autor:** Andrés Grisales Ardila
+Autor: Andrés Grisales Ardila
 
-Implementación completa de un flujo **MLOps** para un modelo de regresión con el dataset **Boston Housing**, incluyendo:
+Implementación completa de un flujo MLOps para un modelo de regresión con el dataset Boston Housing, incluyendo:
 - Control de versiones y trazabilidad de datos.
 - Validación e imputación robusta.
 - Entrenamiento con múltiples modelos y optimización.
 - Selección automática del mejor modelo.
-- Servir el modelo mediante una **API Flask**.
-- Contenerización con **Docker** y automatización en **GitHub Actions (CI/CD)**.
+- Servir el modelo mediante una API Flask.
+- Contenerización con Docker y automatización en GitHub Actions (CI/CD).
 
 ---
 
-## 📁 Estructura del proyecto
+## Estructura del proyecto
 
 ```
 mlops_boston/
@@ -34,7 +34,7 @@ mlops_boston/
 
 ---
 
-## ⚙️ 1. Preparación del entorno
+## 1. Preparación del entorno
 
 ```bash
 python -m venv .venv
@@ -45,7 +45,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🧩 2. Control de datos y trazabilidad
+## 2. Control de datos y trazabilidad
 
 Ejecutar:
 ```bash
@@ -60,7 +60,7 @@ Esto asegura que el dataset usado para entrenamiento sea el mismo que se valida 
 
 ---
 
-## 🧼 3. Validación e imputación de datos
+## 3. Validación e imputación de datos
 
 Ejecutar:
 ```bash
@@ -68,16 +68,16 @@ python scripts/01_validar_datos.py
 ```
 
 Este script:
-- Valida la integridad del archivo (`SHA256`).
+- Valida la integridad del archivo (SHA256).
 - Corrige tipos de datos según esquema.
 - Imputa valores faltantes con lógica robusta:
-  - **Floats / int no binarios** → mediana.
-  - **Variables binarias (0/1)** → moda.
+  - Floats / int no binarios → mediana.
+  - Variables binarias (0/1) → moda.
 - Genera `data/processed/housing_clean.csv`.
 
 ---
 
-## 🤖 4. Entrenamiento del modelo
+## 4. Entrenamiento del modelo
 
 Ejecutar:
 ```bash
@@ -85,12 +85,12 @@ python scripts/02_train_baseline.py
 ```
 
 Modelos usados:
-- **LinearRegression**
-- **Ridge (GridSearchCV)**
-- **RandomForestRegressor (GridSearchCV)**
-- **XGBRegressor (GridSearchCV)**
+- LinearRegression
+- Ridge (GridSearchCV)
+- RandomForestRegressor (GridSearchCV)
+- XGBRegressor (GridSearchCV)
 
-Selecciona el modelo con menor **RMSE** y guarda:
+Selecciona el modelo con menor RMSE y guarda:
 - `models/best_model.pkl`
 - `models/preprocessor.pkl`
 - `models/metrics.json`
@@ -108,13 +108,13 @@ Artefactos guardados en 'models/'
 
 ---
 
-## 🌐 5. API Flask
+## 5. API Flask
 
 Archivo: `app/server.py`
 
 Endpoints:
-- `GET /health` → verifica artefactos (`best_model`, `preprocessor`, `schema`).
-- `POST /predict` → recibe JSON y devuelve predicción.
+- GET /health → verifica artefactos (best_model, preprocessor, schema).
+- POST /predict → recibe JSON y devuelve predicción.
 
 Ejemplo de uso:
 
@@ -129,7 +129,7 @@ Respuesta esperada:
 
 ---
 
-## 🐳 6. Docker
+## 6. Docker
 
 **Dockerfile:**
 
@@ -165,19 +165,19 @@ docker run -p 8000:8000 mlops_boston
 
 ---
 
-## 🔁 7. CI/CD con GitHub Actions
+## 7. CI/CD con GitHub Actions
 
 Workflow `.github/workflows/mlops.yml`:
 
-- **Entrenamiento automático** del modelo en `main` (opcional).  
-- **Construcción y publicación** de la imagen en **GitHub Container Registry (GHCR)**.
+- Entrenamiento automático del modelo en la rama principal.  
+- Construcción y publicación de la imagen en GitHub Container Registry (GHCR).
 
 Imagen generada:  
 `ghcr.io/agrisalesa/mlops_boston:latest`
 
 ---
 
-## 🧭 8. Despliegue en Codespaces
+## 8. Despliegue en Codespaces
 
 1. Abre el Codespace del repositorio.  
 2. En terminal, ejecuta:
@@ -185,31 +185,19 @@ Imagen generada:
    docker pull ghcr.io/agrisalesa/mlops_boston:latest
    docker run -d -p 8000:8000 ghcr.io/agrisalesa/mlops_boston:latest
    ```
-3. En el panel **Ports**, haz público el puerto `8000`.  
+3. En el panel Ports, haz público el puerto 8000.  
 4. Abre en navegador:  
    `https://<tu_codespace>.github.dev/health`
 
 ---
 
-## 📘 9. Conceptos clave
+## 9. Próximos pasos
 
-| Concepto | Descripción |
-|-----------|--------------|
-| **Puerto** | Puerta por donde el servidor escucha peticiones (8000). |
-| **Endpoint** | Ruta interna que ejecuta una función específica (`/predict`, `/health`). |
-| **Flask** | Microframework que convierte funciones en servicios web. |
-| **Docker** | Contenedor que empaqueta código + dependencias. |
-| **CI/CD** | Pipeline automático para construir y desplegar la aplicación. |
+- Migrar a FastAPI para documentación interactiva.  
+- Agregar monitoreo de drift y performance con MLflow o Evidently.  
+- Desplegar en AWS, Azure o GCP.
 
 ---
 
-## 🚀 Próximos pasos
-
-- Migrar a **FastAPI** para documentación interactiva.  
-- Agregar **monitoreo de drift y performance** con MLflow o Evidently.  
-- Desplegar en **AWS**, **Azure** o **GCP**.
-
----
-
-📦 **Repositorio:** [https://github.com/agrisalesa/mlops_boston](https://github.com/agrisalesa/mlops_boston)  
-🧰 **Imagen Docker:** `ghcr.io/agrisalesa/mlops_boston:latest`
+Repositorio: [https://github.com/agrisalesa/mlops_boston](https://github.com/agrisalesa/mlops_boston)  
+Imagen Docker: `ghcr.io/agrisalesa/mlops_boston:latest`
