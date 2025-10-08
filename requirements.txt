@@ -1,12 +1,9 @@
-# Núcleo científico
-numpy
 pandas
+numpy
 scikit-learn
+xgboost
+flask
+gunicorn
 joblib
 scipy
-
-# Modelos
-xgboost
-
-# Serving
-flask
+pytest
