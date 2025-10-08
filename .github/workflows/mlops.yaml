@@ -10,13 +10,11 @@ on:
         required: false
         default: "false"
 
-# Permisos para poder publicar la imagen en GHCR
 permissions:
   contents: read
   packages: write
 
 jobs:
-  # 1) Build + validación + entrenamiento + tests
   build-train-test:
     runs-on: ubuntu-latest
     steps:
@@ -55,7 +53,6 @@ jobs:
             data/processed/housing_clean.csv
             data/provenance.json
 
-  # 2) Chequeo de drift (si no hay logs/predictions.csv, sale "false")
   drift-check:
     needs: build-train-test
     runs-on: ubuntu-latest
@@ -86,9 +83,7 @@ jobs:
         run: mkdir -p logs
 
       - name: Run drift check
-        run: |
-          # Si no existe logs/predictions.csv, el script imprimirá un mensaje y devolverá 0
-          python scripts/04_drift_check.py || true
+        run: python scripts/04_drift_check.py || true
 
       - name: Set output
         id: setout
@@ -96,17 +91,16 @@ jobs:
         run: |
           DRIFT=false
           if [ -f logs/drift_report.json ]; then
-            python - <<'PY' > drift_flag.txt
-import json,sys
-with open('logs/drift_report.json','r') as f:
-    r=json.load(f)
-print('true' if r.get('summary',{}).get('drift_detected') else 'false')
+            DRIFT=$(python - <<'PY'
+import json
+with open("logs/drift_report.json") as f:
+    r = json.load(f)
+print("true" if r.get("summary", {}).get("drift_detected") else "false")
 PY
-            DRIFT=$(cat drift_flag.txt)
+)
           fi
           echo "drift=$DRIFT" >> $GITHUB_OUTPUT
 
-  # 3) Retrain condicional: solo si hubo drift o lo forzaste por workflow_dispatch
   retrain:
     needs: [build-train-test, drift-check]
     if: |
@@ -135,9 +129,7 @@ PY
           path: .
 
       - name: Retrain if better
-        run: |
-          # El script decide si reemplaza o no al actual (no fuerza si no mejora)
-          python scripts/03_retrain_if_better.py
+        run: python scripts/03_retrain_if_better.py
 
       - name: Upload updated artifacts
         uses: actions/upload-artifact@v4
@@ -148,12 +140,10 @@ PY
             data/processed/housing_clean.csv
             data/provenance.json
 
-  # 4) Imagen Docker SIEMPRE que el build inicial pase (use los artefactos del retrain si existieron)
   docker-image:
     needs:
       - build-train-test
       - retrain
-    # Ejecuta si el build pasó y además el retrain terminó en success o fue skipped
     if: |
       needs.build-train-test.result == 'success' &&
       (needs.retrain.result == 'success' || needs.retrain.result == 'skipped')
@@ -162,7 +152,6 @@ PY
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Si hubo retrain en este mismo run, estos artefactos existen; si no, este paso no es crítico
       - name: Download updated artifacts (if any)
         uses: actions/download-artifact@v4
         with:
@@ -170,7 +159,6 @@ PY
           path: .
         continue-on-error: true
 
-      # Siempre baja los baseline por si no hubo retrain
       - name: Download baseline artifacts
         uses: actions/download-artifact@v4
         with:
@@ -178,18 +166,15 @@ PY
           path: .
         continue-on-error: true
 
-      - name: Ensure artifacts exist
+      - name: Verify artifacts
         shell: bash
         run: |
           if [ ! -f models/best_model.pkl ]; then
-            echo "No se encontraron artefactos en models/. Revisa pasos previos."
-            ls -la models || true
+            echo "ERROR: No se encontraron artefactos en models/"
             exit 1
           fi
-          echo "Model artifacts list:"
+          echo "Artifacts encontrados:"
           ls -la models
-          echo "Processed data:"
-          ls -la data/processed || true
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
