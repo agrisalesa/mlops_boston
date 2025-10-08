@@ -30,9 +30,6 @@ logs/
 # ======================================
 .env
 *.env
-*.ini
-*.yaml
-*.yml
 
 # ======================================
 # ARCHIVOS DE SISTEMA / IDEs
@@ -50,15 +47,6 @@ pytest_cache/
 .coverage
 htmlcov/
 
-# ======================================
-# DATOS Y MODELOS (mantén solo los artefactos relevantes)
-# ======================================
-data/raw/
-data/processed/
-!data/provenance.json
-
-models/
-!models/schema.json
 
 # ======================================
 # ARCHIVOS DE CONTENEDOR Y CI/CD
