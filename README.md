@@ -1,261 +1,267 @@
 # 🧠 Proyecto MLOps — Boston Housing
+
 **Autor:** Andrés Grisales Ardila  
-**Descripción:** Implementación completa de un flujo MLOps de extremo a extremo para un modelo de regresión usando el dataset Boston Housing.  
-Incluye trazabilidad de datos, validación robusta, entrenamiento con múltiples modelos, selección automática del mejor modelo y despliegue mediante una API Flask.
+
+**Descripción:**  
+Implementación completa de un flujo MLOps de extremo a extremo para un modelo de regresión usando el dataset *Boston Housing*.  
+Incluye trazabilidad de datos, validación robusta, entrenamiento con múltiples modelos, selección automática del mejor modelo, despliegue mediante una API Flask, y pipeline automatizado de CI/CD con GitHub Actions y Docker.
 
 ---
 
-## 📁 Estructura del proyecto
+## 🧩 Estructura del proyecto
 
 ```
 mlops_boston/
 │
-├── .venv/                  # Entorno virtual de Python
-├── app/                    # API Flask (endpoints health y predict)
-├── data/                   # Datos crudos, procesados y metadatos
-├── logs/                   # Registros de inferencias
-├── models/                 # Artefactos del modelo y metadatos
-├── scripts/                # Scripts de procesamiento, validación y entrenamiento
+├── .github/workflows/          # Pipeline CI/CD (mlops.yml)
+├── app/                        # API Flask (endpoints health y predict)
+├── data/                       # Datos crudos, procesados y metadatos
+├── logs/                       # Registros de ejecución y validación
+├── models/                     # Modelos y preprocesadores entrenados
+├── scripts/                    # Entrenamiento, validación y pruebas
 │
-├── DATA_PROVENANCE         # Archivo con el hash SHA256 del dataset
-├── requirements.txt        # Dependencias del proyecto
-└── README.md               # Documentación principal del proyecto
+├── .dockerignore               # Archivos y carpetas ignoradas por Docker
+├── Dockerfile                  # Imagen de despliegue (Flask + modelo)
+├── DATA_PROVENANCE.md          # Hash SHA256 del dataset original
+├── requirements.txt            # Dependencias del proyecto
+└── README.md                   # Documentación principal del proyecto
 ```
 
 ---
 
-## ⚙️ Instalación del entorno
+## ⚙️ 1. Entorno y dependencias
 
-### 1. Crear y activar entorno virtual
+Crear un entorno virtual e instalar dependencias:
 
-**Windows CMD**
-```bat
-python -m venv .venv
-.venv\Scripts\activate
-```
-
-**PowerShell**
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-**Mac / Linux**
 ```bash
 python -m venv .venv
-source .venv/bin/activate
-```
+source .venv/bin/activate    # En Linux/Mac
+.venv\Scripts\activate     # En Windows
 
-### 2. Instalar dependencias
-
-Crea un archivo `requirements.txt` en la raíz con:
-
-```
-numpy
-pandas
-scikit-learn
-joblib
-xgboost
-flask
-```
-
-Instala todo:
-```bash
-python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
 
-Verifica instalación:
+---
+
+## 🧠 2. Entrenamiento del modelo
+
+Ejecutar el pipeline de entrenamiento (ejemplo desde `scripts/train.py`):
+
 ```bash
-python -c "import flask, joblib, xgboost, sklearn, pandas, numpy; print('OK')"
+python scripts/train.py
 ```
+
+Esto genera:
+- `models/best_model.pkl` → modelo entrenado y optimizado  
+- `models/preprocessor.pkl` → transformaciones de datos  
+- Logs de validación y métricas en `/logs`  
 
 ---
 
-## 📊 Procesamiento de datos
+## 🌍 3. API Flask — Servidor del modelo
 
-Coloca el dataset original en:
-```
-data/raw/housing.csv
+El archivo principal `app/main.py` define los **endpoints**:
+
+```python
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        "best_model": True,
+        "preprocessor": True,
+        "schema": True,
+        "status": "ok"
+    })
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    data = request.get_json()
+    df = pd.DataFrame([data])
+    X = preprocessor.transform(df)
+    prediction = model.predict(X)
+    return jsonify({"prediction": float(prediction[0])})
 ```
 
-### 1. Trazabilidad y hash
-Calcula el hash SHA256 del dataset y guarda la información en `provenance.json`:
+### 🔹 Ejecutar localmente
+
 ```bash
-python scripts/00_provenance.py
+python app/main.py
 ```
 
-Genera:
-- `DATA_PROVENANCE.md`
-- `data/provenance.json`
+Verifica los endpoints:
 
-### 2. Validación, imputación y limpieza
-Ejecuta:
-```bash
-python scripts/01_validar_datos.py
-```
+- `GET http://127.0.0.1:8000/health`
+- `POST http://127.0.0.1:8000/predict` con JSON de entrada.
 
-Acciones que realiza:
-- Normaliza columnas y tipos.
-- Verifica contrato vs `schema.json`.
-- Imputa valores nulos:
-  - Binarias (ej. `CHAS`) → moda  
-  - Índices (ej. `RAD`) → mediana redondeada  
-  - Resto de numéricas → mediana  
-- Elimina filas con NaN en la variable objetivo `MEDV`.  
-- Guarda el dataset limpio en:
-  ```
-  data/processed/housing_clean.csv
-  ```
-
----
-
-## 🧩 Entrenamiento del modelo
-
-Entrena y selecciona automáticamente el mejor modelo según RMSE:
-```bash
-python scripts/02_train_baseline.py
-```
-
-Modelos incluidos:
-- **Linear Regression**
-- **Ridge Regression** (grid de α)
-- **Random Forest Regressor** (grid)
-- **XGBoost Regressor** (grid)
-
-Solo se guarda el mejor modelo.
-
-Archivos generados:
-```
-models/
- ├── best_model.pkl
- ├── preprocessor.pkl
- ├── metrics.json
- └── model_metadata.json
-```
-
----
-
-## 🚀 API Flask — Servir el modelo
-
-Inicia el servidor:
-```bash
-python app/server.py
-```
-
-Por defecto:
-```
-http://127.0.0.1:8000
-```
-
-### 1. Verificar estado
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-Respuesta esperada:
+Ejemplo de cuerpo JSON:
 ```json
 {
-  "status": "ok",
-  "preprocessor": true,
-  "best_model": true,
-  "schema": true
+  "CRIM": 0.1,
+  "ZN": 18,
+  "INDUS": 2.31,
+  "CHAS": 0,
+  "NOX": 0.538,
+  "RM": 6.575,
+  "AGE": 65.2,
+  "DIS": 4.09,
+  "RAD": 1,
+  "TAX": 296,
+  "PTRATIO": 15.3,
+  "B": 396.9,
+  "LSTAT": 4.98
 }
 ```
 
-### 2. Hacer una predicción
+---
 
-**Windows CMD (una línea):**
-```bat
-curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d "{\"CRIM\":0.1,\"ZN\":18,\"INDUS\":2.31,\"CHAS\":0,\"NOX\":0.538,\"RM\":6.575,\"AGE\":65.2,\"DIS\":4.09,\"RAD\":1,\"TAX\":296,\"PTRATIO\":15.3,\"B\":396.9,\"LSTAT\":4.98}"
+## 🐳 4. Despliegue con Docker
+
+**Dockerfile:**
+```dockerfile
+FROM python:3.9-slim
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+EXPOSE 8000
+
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8000", "app.main:app"]
 ```
 
-**Windows PowerShell:**
-```powershell
-$body = @{
-  CRIM=0.1; ZN=18; INDUS=2.31; CHAS=0; NOX=0.538; RM=6.575;
-  AGE=65.2; DIS=4.09; RAD=1; TAX=296; PTRATIO=15.3; B=396.9; LSTAT=4.98
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/predict -ContentType "application/json" -Body $body
+**.dockerignore:**
+```
+__pycache__/
+*.pyc
+*.pkl
+*.log
+.venv/
+data/
+logs/
 ```
 
-**Mac / Linux (curl):**
+Construir y ejecutar la imagen:
+
 ```bash
-curl -X POST http://127.0.0.1:8000/predict   -H "Content-Type: application/json"   -d '{"CRIM":0.1,"ZN":18,"INDUS":2.31,"CHAS":0,"NOX":0.538,"RM":6.575,"AGE":65.2,"DIS":4.09,"RAD":1,"TAX":296,"PTRATIO":15.3,"B":396.9,"LSTAT":4.98}'
-```
-
-Ejemplo de respuesta:
-```json
-{"prediction": 27.83}
+docker build -t mlops_boston .
+docker run -p 8000:8000 mlops_boston
 ```
 
 ---
 
-## ✅ Validación del payload
+## ⚙️ 5. CI/CD con GitHub Actions
 
-El endpoint `/predict` valida:
-- Estructura completa (todas las columnas del `schema`).
-- Tipos (`int` o `float`).
-- Rango razonable por variable (`RANGE_RULES` en `server.py`).
-- Reglas específicas:
-  - `CHAS` ∈ {0,1}  
-  - `RAD` entero positivo
+Archivo: `.github/workflows/mlops.yml`
 
-Si hay errores:
-```json
-{
-  "error": "CHAS: debe ser 0 o 1; RAD: debe ser entero positivo (>=1)"
-}
+```yaml
+name: mlops-ci
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-train-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Train model
+        run: python scripts/train.py
+
+      - name: Save model artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: model-artifacts
+          path: models/
+
+  docker:
+    needs: build-train-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
 ```
-(HTTP 422)
 
 ---
 
-## 🧾 Logging
+## 🚀 6. Despliegue en GitHub Codespaces
 
-Cada inferencia se guarda en:
-```
-logs/predictions.csv
-```
+Puedes ejecutar el contenedor directamente en tu entorno Codespaces.  
+El puerto **8000** debe marcarse como **“Public”** y abrirlo desde el panel *Ports*.
 
-Con columnas:
-```
-CRIM,ZN,INDUS,CHAS,...,LSTAT,prediction,ts
-```
+### Para probar:
 
-Esto permite trazabilidad de cada request.
+- Endpoint de salud:  
+  `GET https://<tu_codespace>.github.dev/health`  
+- Endpoint de predicción:  
+  `POST https://<tu_codespace>.github.dev/predict`
 
 ---
 
-## 🧠 Recomendaciones finales
+## 🔍 7. Conceptos clave aprendidos
 
-- Para producción, usar un servidor WSGI:
-  ```bash
-  pip install gunicorn
-  gunicorn -w 2 -b 0.0.0.0:8000 app.server:app
-  ```
-- Si el puerto 8000 está ocupado, cámbialo en `server.py`:
-  ```python
-  app.run(host="127.0.0.1", port=5000, debug=False)
-  ```
-- El modo `debug=True` es solo para desarrollo (muestra errores y recarga automática).
+| Concepto | Explicación |
+|-----------|-------------|
+| **Puerto 8000** | Es la “puerta” por donde Flask escucha las peticiones HTTP. |
+| **Endpoint** | Es la “ruta” o función específica del servidor que responde a una URL. |
+| **Flask** | Microframework de Python que convierte funciones en servicios web. |
+| **Docker** | Empaqueta el proyecto con todas sus dependencias en un contenedor reproducible. |
+| **GitHub Actions** | Automatiza el entrenamiento, pruebas y publicación del contenedor. |
 
 ---
 
-## 🧩 Solución de errores comunes
+## 🧭 8. Flujo general del proyecto
 
-| Error | Solución |
-|-------|-----------|
-| `ModuleNotFoundError: No module named 'flask'` | Instala Flask: `pip install flask` |
-| `ModuleNotFoundError: No module named 'xgboost'` | Instala XGBoost: `pip install xgboost` |
-| `The server stays running` | Es normal, está escuchando peticiones. Abre otra terminal para usar curl. |
-| `422 - error de validación` | Alguna variable fuera de rango o tipo incorrecto. Revisa mensaje devuelto. |
-| `OSError: [Errno 98] Address already in use` | Cambia el puerto (por ejemplo a 5000). |
+1️⃣ Validación y preprocesamiento de datos  
+2️⃣ Entrenamiento con múltiples modelos  
+3️⃣ Selección del mejor modelo  
+4️⃣ Serialización (`joblib`) de modelo y preprocesador  
+5️⃣ Despliegue con Flask  
+6️⃣ Contenerización con Docker  
+7️⃣ Automatización con GitHub Actions  
+8️⃣ Ejecución y prueba en Codespaces  
 
 ---
 
-## 📜 Licencia y uso
+## 📈 9. Ejemplo de flujo en producción (visual)
 
-Este proyecto es educativo y utiliza el dataset **Boston Housing** con fines de práctica.  
-Ajusta el `README`, `schema.json` y las reglas de validación a tus propias políticas o dominio si lo reutilizas para un caso empresarial.
+El flujo de peticiones hacia la API Flask:
+
+![Diagrama de flujo API Flask](A_diagram_in_a_digital_vector_graphic_format_illus.png)
+
+---
+
+## 🏁 10. Próximos pasos sugeridos
+
+- Migrar de **Flask** a **FastAPI** para documentación automática.  
+- Incluir monitoreo de predicciones con MLflow o EvidentlyAI.  
+- Desplegar en un entorno gestionado (AWS, Azure o Google Cloud).  
+
+---
+
+📌 **Repositorio:** [https://github.com/agrisalesa/mlops_boston](https://github.com/agrisalesa/mlops_boston)  
+📦 **Imagen Docker:** `ghcr.io/agrisalesa/mlops_boston:latest`  
