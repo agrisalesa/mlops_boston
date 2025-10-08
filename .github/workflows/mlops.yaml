@@ -10,8 +10,13 @@ on:
         required: false
         default: "false"
 
+# Permisos para poder publicar la imagen en GHCR
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  # 1) Prepara, valida, entrena y publica artefactos + ejecuta tests
+  # 1) Build + validación + entrenamiento + tests
   build-train-test:
     runs-on: ubuntu-latest
     steps:
@@ -27,9 +32,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # xgboost y scipy por si los scripts los requieren en esta fase
-          pip install xgboost scipy
-          # deps de test si usas pytest
           pip install pytest
 
       - name: Provenance
@@ -44,7 +46,7 @@ jobs:
       - name: Unit tests
         run: pytest -q
 
-      - name: Upload artifacts (model + processed data)
+      - name: Upload artifacts (models + processed data)
         uses: actions/upload-artifact@v4
         with:
           name: model-artifacts
@@ -52,9 +54,8 @@ jobs:
             models/
             data/processed/housing_clean.csv
             data/provenance.json
-          if-no-files-found: error
 
-  # 2) Calcula drift si existen logs de predicciones; no falla si no hay logs
+  # 2) Chequeo de drift (si no hay logs/predictions.csv, sale "false")
   drift-check:
     needs: build-train-test
     runs-on: ubuntu-latest
@@ -75,7 +76,7 @@ jobs:
           pip install -r requirements.txt
           pip install scipy
 
-      - name: Download artifacts
+      - name: Download baseline artifacts
         uses: actions/download-artifact@v4
         with:
           name: model-artifacts
@@ -84,9 +85,9 @@ jobs:
       - name: Ensure logs dir
         run: mkdir -p logs
 
-      - name: Run drift check (tolerant)
+      - name: Run drift check
         run: |
-          # Si no hay logs/predictions.csv, el script puede salir sin error
+          # Si no existe logs/predictions.csv, el script imprimirá un mensaje y devolverá 0
           python scripts/04_drift_check.py || true
 
       - name: Set output
@@ -95,15 +96,22 @@ jobs:
         run: |
           DRIFT=false
           if [ -f logs/drift_report.json ]; then
-            python -c "import json; r=json.load(open('logs/drift_report.json')); print('true' if r.get('summary',{}).get('drift_detected') else 'false')" > drift_flag.txt
+            python - <<'PY' > drift_flag.txt
+import json,sys
+with open('logs/drift_report.json','r') as f:
+    r=json.load(f)
+print('true' if r.get('summary',{}).get('drift_detected') else 'false')
+PY
             DRIFT=$(cat drift_flag.txt)
           fi
           echo "drift=$DRIFT" >> $GITHUB_OUTPUT
 
-  # 3) Retraining solo si hubo drift o si fuerzas por input
+  # 3) Retrain condicional: solo si hubo drift o lo forzaste por workflow_dispatch
   retrain:
     needs: [build-train-test, drift-check]
-    if: needs.drift-check.outputs.drift == 'true' || github.event.inputs.force_retrain == 'true'
+    if: |
+      needs.build-train-test.result == 'success' &&
+      (github.event.inputs.force_retrain == 'true' || needs.drift-check.outputs.drift == 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -126,10 +134,10 @@ jobs:
           name: model-artifacts
           path: .
 
-      - name: Retrain if better (does not fail CI)
+      - name: Retrain if better
         run: |
-          # Si no mejora, tu script no reemplaza artefactos; en cualquier caso no queremos romper el CI
-          python scripts/03_retrain_if_better.py || true
+          # El script decide si reemplaza o no al actual (no fuerza si no mejora)
+          python scripts/03_retrain_if_better.py
 
       - name: Upload updated artifacts
         uses: actions/upload-artifact@v4
@@ -139,18 +147,22 @@ jobs:
             models/
             data/processed/housing_clean.csv
             data/provenance.json
-          if-no-files-found: warn
 
-  # 4) Construye SIEMPRE la imagen cuando build-train-test fue OK
+  # 4) Imagen Docker SIEMPRE que el build inicial pase (use los artefactos del retrain si existieron)
   docker-image:
-    needs: [build-train-test, retrain]
-    if: needs.build-train-test.result == 'success'
+    needs:
+      - build-train-test
+      - retrain
+    # Ejecuta si el build pasó y además el retrain terminó en success o fue skipped
+    if: |
+      needs.build-train-test.result == 'success' &&
+      (needs.retrain.result == 'success' || needs.retrain.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Descarga artefactos "updated" si hubo retraining; si no, se ignora y usaremos los baseline
+      # Si hubo retrain en este mismo run, estos artefactos existen; si no, este paso no es crítico
       - name: Download updated artifacts (if any)
         uses: actions/download-artifact@v4
         with:
@@ -158,6 +170,7 @@ jobs:
           path: .
         continue-on-error: true
 
+      # Siempre baja los baseline por si no hubo retrain
       - name: Download baseline artifacts
         uses: actions/download-artifact@v4
         with:
@@ -165,18 +178,17 @@ jobs:
           path: .
         continue-on-error: true
 
-      - name: Prepare artifacts for build
+      - name: Ensure artifacts exist
         shell: bash
         run: |
-          # Si existen artefactos "updated", ya están sobre models/ y data/processed/.
-          # Si no existen, asegúrate de que los baseline estén presentes.
           if [ ! -f models/best_model.pkl ]; then
-            echo "No se encontraron artefactos en models/. Revisar pasos previos."
+            echo "No se encontraron artefactos en models/. Revisa pasos previos."
             ls -la models || true
             exit 1
           fi
-          echo "Artefactos que irán al build:"
+          echo "Model artifacts list:"
           ls -la models
+          echo "Processed data:"
           ls -la data/processed || true
 
       - name: Log in to GHCR
