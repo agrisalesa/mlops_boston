@@ -1,0 +1,68 @@
+# ======================================
+# ARCHIVOS COMPILADOS DE PYTHON
+# ======================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyd
+*$py.class
+
+# ======================================
+# ENTORNOS VIRTUALES
+# ======================================
+.venv/
+venv/
+env/
+
+# ======================================
+# ARCHIVOS DE LOGS Y TEMPORALES
+# ======================================
+*.log
+logs/
+*.csv
+!logs/.gitkeep
+*.tmp
+*.bak
+
+# ======================================
+# ARCHIVOS DE CONFIGURACIÓN LOCAL
+# ======================================
+.env
+*.env
+*.ini
+*.yaml
+*.yml
+
+# ======================================
+# ARCHIVOS DE SISTEMA / IDEs
+# ======================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ======================================
+# ARCHIVOS DE TEST Y COBERTURA
+# ======================================
+pytest_cache/
+.coverage
+htmlcov/
+
+# ======================================
+# DATOS Y MODELOS (mantén solo los artefactos relevantes)
+# ======================================
+data/raw/
+data/processed/
+!data/provenance.json
+
+models/
+!models/schema.json
+
+# ======================================
+# ARCHIVOS DE CONTENEDOR Y CI/CD
+# ======================================
+*.tar
+*.gz
+*.zip
