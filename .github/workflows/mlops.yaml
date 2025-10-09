@@ -48,12 +48,15 @@ jobs:
         run: |
           pytest --cov=scripts --cov-report=term-missing --cov-report=xml --no-cov-on-fail
 
-
-      - name: Generate GitHub summary
-        if: always()
+      - name: Coverage summary
         run: |
-          echo "## Code Coverage Summary" >> $GITHUB_STEP_SUMMARY
-          coverage report >> $GITHUB_STEP_SUMMARY
+          echo "### Code Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Script | Coverage |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----------|" >> $GITHUB_STEP_SUMMARY
+          pytest --cov=scripts --cov-report=term-missing --cov-report=xml --no-cov-on-fail \
+            | grep -E "scripts/.*py" \
+            | awk '{printf("| %s | %s%% |\n", $1, $(NF))}' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
