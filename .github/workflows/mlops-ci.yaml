@@ -1,4 +1,4 @@
-name: mlops-ci
+name: MLOps CI/CD Pipeline
 
 on:
   push:
@@ -26,25 +26,25 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install xgboost scipy pytest pytest-cov
 
-      - name: Provenance
+      - name: Run provenance tracking
         run: python scripts/00_provenance.py
 
       - name: Validate & clean data
         run: python scripts/01_validar_datos.py
 
-      - name: Train baseline
+      - name: Train baseline models
         run: python scripts/02_train_baseline.py
 
       - name: Unit tests
         run: pytest -q
 
-      - name: Coverage report
+      - name: Coverage report (XML + Terminal)
         run: |
           pytest --cov=scripts --cov-report=term-missing --cov-report=xml --no-cov-on-fail
 
@@ -70,7 +70,7 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
-      - name: Upload baseline artifacts
+      - name: Upload model artifacts
         uses: actions/upload-artifact@v4
         with:
           name: model-artifacts
@@ -79,8 +79,36 @@ jobs:
             data/processed/housing_clean.csv
             data/provenance.json
 
-  drift-check:
+  sonarcloud-analysis:
     needs: build-train-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for accurate analysis
+
+      - name: Setup JDK 17 (required by SonarScanner)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Run SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  drift-check:
+    needs: [build-train-test, sonarcloud-analysis]
     runs-on: ubuntu-latest
     outputs:
       drift: ${{ steps.setout.outputs.drift }}
@@ -93,25 +121,25 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install scipy
 
-      - name: Download baseline artifacts
+      - name: Download model artifacts
         uses: actions/download-artifact@v4
         with:
           name: model-artifacts
           path: .
 
-      - name: Ensure logs dir
+      - name: Ensure logs directory
         run: mkdir -p logs
 
-      - name: Run drift check
+      - name: Run drift detection
         run: python scripts/04_drift_check.py || true
 
-      - name: Set output
+      - name: Set drift output
         id: setout
         shell: bash
         run: |
@@ -136,19 +164,19 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install xgboost scipy
 
-      - name: Download baseline artifacts
+      - name: Download model artifacts
         uses: actions/download-artifact@v4
         with:
           name: model-artifacts
           path: .
 
-      - name: Retrain (forced by job condition)
+      - name: Retrain model (conditional)
         run: python scripts/03_retrain_if_better.py --force
 
       - name: Upload updated artifacts
@@ -160,7 +188,7 @@ jobs:
             data/processed/housing_clean.csv
             data/provenance.json
 
-      - name: Flag updated= true
+      - name: Flag updated artifacts
         id: flag
         run: echo "updated=true" >> "$GITHUB_OUTPUT"
 
@@ -172,12 +200,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Debug needs context
+      - name: Debug job dependencies
         run: |
           echo "needs.retrain.result=${{ needs.retrain.result }}"
           echo "needs.retrain.outputs.updated=${{ needs.retrain.outputs.updated }}"
 
-      - name: Download updated artifacts (if any)
+      - name: Download updated artifacts (if retrained)
         if: needs.retrain.result == 'success' && needs.retrain.outputs.updated == 'true'
         uses: actions/download-artifact@v4
         with:
@@ -191,14 +219,14 @@ jobs:
           name: model-artifacts
           path: .
 
-      - name: Log in to GHCR
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
