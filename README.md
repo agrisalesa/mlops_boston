@@ -147,7 +147,7 @@ Incluye:
 
 ---
 
-## 8. API REST (FastAPI)
+## 8. API REST (Flask)
 
 Archivo: `app/server.py`
 
