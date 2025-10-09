@@ -7,3 +7,4 @@ gunicorn
 joblib
 scipy
 pytest
+coverage
