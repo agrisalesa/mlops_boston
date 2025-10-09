@@ -12,8 +12,10 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT / "app"))
 
 def load_script(module_path):
+    import importlib.util, sys
     spec = importlib.util.spec_from_file_location(module_path.stem, module_path)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[f"scripts.{module_path.stem}"] = module  # <-- clave
     spec.loader.exec_module(module)
     return module
 

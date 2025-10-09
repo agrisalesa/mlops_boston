@@ -46,7 +46,8 @@ jobs:
 
       - name: Coverage report
         run: |
-          pytest --cov=scripts --cov=app --cov-report=term-missing --cov-report=xml --no-cov-on-fail --ignore=tests
+          pytest --cov=scripts --cov-report=term-missing --cov-report=xml --no-cov-on-fail
+
 
       - name: Generate GitHub summary
         if: always()
