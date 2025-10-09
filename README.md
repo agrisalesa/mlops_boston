@@ -20,7 +20,7 @@ Implementación completa de un flujo MLOps de punta a punta para un modelo de re
 ```
 mlops_boston/
 ├── .github/workflows/        # Pipeline CI/CD (mlops.yml)
-├── app/                      # API FastAPI (server.py)
+├── app/                      # API (server.py)
 ├── data/                     # Datos crudos y procesados
 ├── logs/                     # Logs y reportes de drift
 ├── models/                   # Modelos, preprocesador y metadatos
