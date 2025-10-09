@@ -84,7 +84,7 @@ def _coaccionar_a_numerico(df: pd.DataFrame,
         kind = str(spec.get("dtype", "float")).lower()
         try:
             if spec.get("binary", False) or kind in ("bool", "binary"):
-                df[col] = df[col].map({True: 1, False: 0, "1": 1, "0": 0, 1: 1, 0: 0})
+                df[col] = df[col].map({True: 1, False: 0, "1": 1, "0": 0})
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             elif kind in ("int", "int64"):
                 df[col] = pd.to_numeric(df[col], errors="coerce").astype("float")

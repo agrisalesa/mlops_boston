@@ -69,10 +69,13 @@ def _current_best_rmse():
     return float("inf")
 
 def _preprocessor():
-    return Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler())
-    ])
+    return Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler())
+        ],
+        memory=None  # explicit to satisfy SonarCloud
+    )
 
 def _rmse(y_true, y_pred):
     # compatibilidad con versiones antiguas de sklearn
@@ -158,9 +161,9 @@ def main(force=False, test_size=0.2, random_state=42):
     features = [c for c in df.columns if c != target]
 
     pre = _preprocessor()
-    X_proc = pre.fit_transform(df[features])
+    x_proc = pre.fit_transform(df[features])
     X_train, X_test, y_train, y_test = train_test_split(
-        X_proc, df[target], test_size=test_size, random_state=random_state
+        x_proc, df[target], test_size=test_size, random_state=random_state
     )
 
     scores, best_name, best_model = _train_models(X_train, y_train, X_test, y_test)

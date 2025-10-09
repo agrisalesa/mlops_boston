@@ -3,7 +3,7 @@
 
 import json
 import pickle
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -106,27 +106,31 @@ def main():
 
     # 4) Preprocesador simple (estandarización). Se guarda como artefacto.
     scaler = StandardScaler()
-    Xtr = scaler.fit_transform(X_train)
-    Xte = scaler.transform(X_test)
+    xtr = scaler.fit_transform(X_train)
+    xte = scaler.transform(X_test)
 
     # 5) Modelos
     models = {}
 
     # Linear Regression
     lr = LinearRegression()
-    lr.fit(Xtr, y_train)
+    lr.fit(xtr, y_train)
     models["linear_regression"] = lr
 
     # Random Forest
     rf = RandomForestRegressor(
-        n_estimators=300, random_state=42, n_jobs=-1
+        n_estimators=300,
+        random_state=42,
+        n_jobs=-1,
+        min_samples_leaf=1,      # tamaño mínimo de hoja (controla sobreajuste)
+        max_features="sqrt"      # número de features consideradas en cada split
     )
-    rf.fit(Xtr, y_train)
+    rf.fit(xtr, y_train)
     models["random_forest"] = rf
 
     # Ridge
     ridge = Ridge(alpha=1.0, random_state=42)
-    ridge.fit(Xtr, y_train)
+    ridge.fit(xtr, y_train)
     models["ridge"] = ridge
 
     if HAS_XGB:
@@ -140,13 +144,13 @@ def main():
             n_jobs=-1,
             reg_lambda=1.0,
         )
-        xgb.fit(Xtr, y_train)
+        xgb.fit(xtr, y_train)
         models["xgboost"] = xgb
 
     # 6) Evaluación
     metrics = {}
     for name, m in models.items():
-        yhat = m.predict(Xte)
+        yhat = m.predict(xte)
         metrics[name] = _evaluate(y_test, yhat)
 
     # 7) Selección por RMSE mínimo
@@ -166,7 +170,7 @@ def main():
         json.dumps(
             {
                 "best_model_name": best_name,
-                "trained_at": datetime.utcnow().isoformat() + "Z",
+                "trained_at": datetime.now(timezone.utc).isoformat(),
                 "n_features": len(feature_cols),
                 "feature_order": feature_cols,
             },

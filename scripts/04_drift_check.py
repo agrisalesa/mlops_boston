@@ -27,7 +27,7 @@ from scipy.stats import ks_2samp
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 LOGS = ROOT / "logs"
-
+DRIFT_SUMMARY_HEADER = "=== Drift summary ==="
 PROCESSED = DATA / "processed" / "housing_clean.csv"
 PRED_LOG = LOGS / "predictions.csv"
 REPORT = LOGS / "drift_report.json"
@@ -90,7 +90,7 @@ def main(window=1000, min_live=200, psi_severe=0.2, ks_p_th=0.01):
         }
         REPORT.parent.mkdir(exist_ok=True)
         REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
-        print("=== Drift summary ===")
+        print(DRIFT_SUMMARY_HEADER)
         print(json.dumps(report["summary"], indent=2))
         print(f"Reporte: {REPORT}")
         return
@@ -116,7 +116,7 @@ def main(window=1000, min_live=200, psi_severe=0.2, ks_p_th=0.01):
         }
         REPORT.parent.mkdir(exist_ok=True)
         REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
-        print("=== Drift summary ===")
+        print(DRIFT_SUMMARY_HEADER)
         print(json.dumps(report["summary"], indent=2))
         print(f"Reporte: {REPORT}")
         return
@@ -147,7 +147,7 @@ def main(window=1000, min_live=200, psi_severe=0.2, ks_p_th=0.01):
     REPORT.parent.mkdir(exist_ok=True)
     REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
-    print("=== Drift summary ===")
+    print(DRIFT_SUMMARY_HEADER)
     print(json.dumps(report["summary"], indent=2))
     print(f"Reporte: {REPORT}")
 

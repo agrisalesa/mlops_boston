@@ -115,9 +115,9 @@ def predict():
     if not isinstance(data, dict):
         return jsonify({"error": "Cuerpo JSON inválido"}), 400
 
-    X_df = _cast_and_align(data)
-    X_proc = _preproc.transform(X_df)
-    yhat = _model.predict(X_proc)
+    x_df = _cast_and_align(data)
+    x_proc = _preproc.transform(x_df)
+    yhat = _model.predict(x_proc)
     pred = float(yhat[0])
 
     _log_prediction(data, pred)
