@@ -94,6 +94,12 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: .
+
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
         with:
