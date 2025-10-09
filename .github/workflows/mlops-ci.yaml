@@ -107,6 +107,10 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
+      # 🔍 Aquí se agrega el paso para verificar la ubicación del archivo
+      - name: Verify coverage presence
+        run: ls -R .
+
       - name: Run SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
