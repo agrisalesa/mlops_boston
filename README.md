@@ -235,3 +235,4 @@ Este proyecto demuestra:
 - Despliegue reproducible mediante Docker + CI/CD.  
 
 Ideal para entornos productivos con bajo mantenimiento manual.
+"# retry sonarcloud" 
