@@ -87,7 +87,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # requerido por Sonar para blame/SCM
+          fetch-depth: 0
 
       - name: Setup JDK 17 (required by SonarScanner)
         uses: actions/setup-java@v4
@@ -99,7 +99,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: coverage-report
-          path: .   # => deja coverage.xml en la raíz del workspace
+          path: .
 
       - name: Verify coverage presence (debug)
         run: |
@@ -127,11 +127,8 @@ jobs:
             -Dsonar.test.inclusions=tests/**/*.py
             -Dsonar.exclusions=**/__pycache__/**,**/logs/**,**/data/**,**/models/**
             -Dsonar.sourceEncoding=UTF-8
-            # 👇 clave para que Sonar conozca la "versión" del análisis
             -Dsonar.projectVersion=${{ github.run_number }}
-            # 👇 define New Code respecto a main (ver sección 2)
             -Dsonar.newCode.referenceBranch=main
-
 
   drift-check:
     needs: [build-train-test, sonarcloud-analysis]
