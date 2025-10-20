@@ -87,7 +87,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for accurate analysis
+          fetch-depth: 0  # requerido por Sonar para blame/SCM
 
       - name: Setup JDK 17 (required by SonarScanner)
         uses: actions/setup-java@v4
@@ -99,7 +99,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: coverage-report
-          path: .  # deja coverage.xml en la raíz
+          path: .   # => deja coverage.xml en la raíz del workspace
+
+      - name: Verify coverage presence (debug)
+        run: |
+          echo "PWD=$(pwd)"
+          ls -l coverage.xml || true
+          head -n 20 coverage.xml || true
 
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
@@ -108,25 +114,24 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: Verify coverage presence
-        run: |
-          ls -l .
-          test -f coverage.xml || (echo "coverage.xml not found"; exit 1)
-
       - name: Run SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # 👉 fuerza a Sonar a leer el coverage que acabamos de descargar
           args: >
             -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.sources=scripts,app
+            -Dsonar.tests=tests
+            -Dsonar.test.inclusions=tests/**/*.py
+            -Dsonar.exclusions=**/__pycache__/**,**/logs/**,**/data/**,**/models/**
             -Dsonar.sourceEncoding=UTF-8
+            # 👇 clave para que Sonar conozca la "versión" del análisis
+            -Dsonar.projectVersion=${{ github.run_number }}
+            # 👇 define New Code respecto a main (ver sección 2)
+            -Dsonar.newCode.referenceBranch=main
 
-      - name: Link to SonarCloud Report
-        run: |
-          echo "### 🔍 [View full SonarCloud Report](https://sonarcloud.io/project/overview?id=agrisalesa_mlops_boston)" >> $GITHUB_STEP_SUMMARY
 
   drift-check:
     needs: [build-train-test, sonarcloud-analysis]
