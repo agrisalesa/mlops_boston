@@ -3,6 +3,7 @@
 
 import json
 import pickle
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -10,7 +11,9 @@ import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, request
 
-ROOT = Path(__file__).resolve().parents[1]
+# ✅ Ajuste universal de rutas (funciona dentro y fuera de Docker)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT = Path(BASE_DIR).resolve().parents[0]  # sube a la raíz del proyecto (/app en Docker)
 MODELS = ROOT / "models"
 LOGS = ROOT / "logs"
 
@@ -18,6 +21,7 @@ BEST_MODEL_PATH = MODELS / "best_model.pkl"
 PREPROC_PATH = MODELS / "preprocessor.pkl"
 SCHEMA_PATH = MODELS / "schema.json"
 PRED_LOG = LOGS / "predictions.csv"
+
 
 app = Flask(__name__)
 
